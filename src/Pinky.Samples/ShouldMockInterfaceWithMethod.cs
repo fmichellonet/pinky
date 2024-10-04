@@ -17,6 +17,20 @@ public class ShouldMockInterfaceWithMethod
     }
 
     [Test]
+    public void GenerateCorrectlyIntMethod()
+    {
+        // Arrange
+        var instance = Ghost.For<IWithIntMethod>();
+
+        // Act
+        var res = instance.IntMethod();
+
+        // Assert
+        Assert.That(instance, Is.Not.Null);
+        Assert.That(res, Is.EqualTo(default(int)));
+    }
+
+    [Test]
     public void Track_MethodCall()
     {
         // Arrange
@@ -62,4 +76,9 @@ public class ShouldMockInterfaceWithMethod
 public interface IWithVoidMethod
 {
     void VoidMethod();
+}
+
+public interface IWithIntMethod
+{
+    int IntMethod();
 }

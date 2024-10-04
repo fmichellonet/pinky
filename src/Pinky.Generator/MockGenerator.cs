@@ -150,10 +150,21 @@ public class MockGenerator : IIncrementalGenerator
     private static string GenerateMethod(Method method)
     {
         return $$"""
-                 public virtual {{method.ReturnType}} {{method.Name}}(){
+                 public virtual {{method.ReturnType.ToFriendlyString()}} {{method.Name}}(){
                     _gateKeeper.Track("{{method.Name}}", Array.Empty<object>());
+                    {{GenerateMethodReturnType(method)}}
                  }
                  """;
+    }
+
+    private static string GenerateMethodReturnType(Method method)
+    {
+        if (method.ReturnType == typeof(void))
+        {
+            return string.Empty;
+        }
+
+        return "return default;";
     }
 
     private static string GenerateVerifierMethods(IReadOnlyCollection<Method> methods)
@@ -164,8 +175,9 @@ public class MockGenerator : IIncrementalGenerator
     private static string GenerateVerifierMethod(Method method)
     {
         return $$"""
-                 public override {{method.ReturnType}} {{method.Name}}(){
+                 public override {{method.ReturnType.ToFriendlyString()}} {{method.Name}}(){
                     _gateKeeper.Check("{{method.Name}}", Array.Empty<object>(), count);
+                    {{GenerateMethodReturnType(method)}}
                  }
                  """;
     }

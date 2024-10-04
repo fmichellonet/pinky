@@ -1,4 +1,5 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections.Generic;
 
 namespace Pinky;
 
@@ -9,4 +10,4 @@ internal record MockInformation(
     IReadOnlyCollection<Method> Methods);
 
 
-internal record Method(string Name, string ReturnType);
+internal record Method(string Name, Type ReturnType);
