@@ -20,66 +20,55 @@ internal class GhostParser
 
         return new MockInformation(
             ComputeClassNameToGenerate(symbol),
-            ComputeInterfaceToImplement(forMethod),
+            ComputeInterfaceToImplement(forMethod, semanticModel),
             ComputeUsings(forMethod, semanticModel),
             ComputeMethods(forMethod, semanticModel)
             );
     }
 
-    private static IReadOnlyCollection<Method> ComputeMethods(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
+    private static (TypeSyntax interfaceType, INamedTypeSymbol typeSymbol) GetInterfaceTypeInfo(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
     {
         var memberAccess = forMethod.Expression as MemberAccessExpressionSyntax;
 
-        if (memberAccess?.Name is GenericNameSyntax genericName)
+        if (memberAccess?.Name is not GenericNameSyntax genericName)
         {
-
-            var interfaceType = genericName.TypeArgumentList.Arguments.Single();
-
-            var typeSymbol = semanticModel.GetSymbolInfo(interfaceType).Symbol as INamedTypeSymbol;
-            var allMethods = typeSymbol.GetMembers().OfType<IMethodSymbol>();
-
-            return allMethods
-                .Select(x => new Method(x.Name, x.ReturnType.ToDisplayString()))
-                .ToArray();
+            throw new ArgumentException("Unable to find the interface type");
         }
+            
+        var interfaceType = genericName.TypeArgumentList.Arguments.Single();
+        if (semanticModel.GetSymbolInfo(interfaceType).Symbol is not INamedTypeSymbol typeSymbol)
+        {
+            throw new ArgumentException("Unable to find the interface type");
+        }
+        return (interfaceType, typeSymbol);
 
-        throw new ArgumentException("ggrr3");
     }
 
+    private static IReadOnlyCollection<Method> ComputeMethods(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
+    {
+        var (_, typeSymbol) = GetInterfaceTypeInfo(forMethod, semanticModel);
+
+        var allMethods = typeSymbol.GetMembers().OfType<IMethodSymbol>();
+
+        return allMethods
+            .Select(x => new Method(x.Name, x.ReturnType.ToDisplayString()))
+            .ToArray();
+    }
 
     private static string ComputeClassNameToGenerate(IMethodSymbol symbol)
     {
         return $"{symbol.ContainingType.ToDisplayString().Replace(".", "_")}_{symbol.Name}";
     }
 
-    private static string ComputeInterfaceToImplement(InvocationExpressionSyntax forMethod)
+    private static string ComputeInterfaceToImplement(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
     {
-        var memberAccess = forMethod.Expression as MemberAccessExpressionSyntax;
-
-        if (memberAccess?.Name is GenericNameSyntax genericName)
-        {
-
-            var interfaceType = genericName.TypeArgumentList.Arguments.Single();
-            return interfaceType.ToString();
-        }
-
-        throw new ArgumentException("ggrr");
+        var (interfaceType, _) = GetInterfaceTypeInfo(forMethod, semanticModel);
+        return interfaceType.ToString();
     }
-
 
     private static IReadOnlyCollection<string> ComputeUsings(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
     {
-        var memberAccess = forMethod.Expression as MemberAccessExpressionSyntax;
-
-        if (memberAccess?.Name is GenericNameSyntax genericName)
-        {
-
-            var interfaceType = genericName.TypeArgumentList.Arguments.Single();
-            var typeSymbol = semanticModel.GetSymbolInfo(interfaceType).Symbol as INamedTypeSymbol;
-            return new[] { typeSymbol.ContainingNamespace.ToDisplayString() };
-            
-        }
-        throw new ArgumentException("ggrr2");
-        
+        var (_, typeSymbol) = GetInterfaceTypeInfo(forMethod, semanticModel);
+        return [typeSymbol.ContainingNamespace.ToDisplayString()];
     }
 }
