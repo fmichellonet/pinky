@@ -82,3 +82,14 @@ public interface IWithIntMethod
 {
     int IntMethod();
 }
+
+public interface IWithCharMethod
+{
+    char CharMethod();
+}
+
+public interface IWithStringMethod
+{
+    string StringMethod();
+}
+

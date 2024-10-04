@@ -1,13 +1,9 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 
 namespace Pinky;
 
 internal record MockInformation(
-    string ClassNameToGenerate, 
-    string InterfaceToImplement, 
+    string ClassNameToGenerate,
+    string InterfaceToImplement,
     IReadOnlyCollection<string> Usings,
-    IReadOnlyCollection<Method> Methods);
-
-
-internal record Method(string Name, Type ReturnType);
+    IReadOnlyCollection<IMethod> Methods);

@@ -7,7 +7,7 @@ public static class TypeExtensions
 {
     private static readonly Dictionary<Type, string> SpecialTypeNames = new()
     {
-        { typeof(void), "void" },
+        { typeof(SpecialTypes.Void), "void" },
         //{ typeof(int), "int" },
         //{ typeof(long), "long" },
         //{ typeof(float), "float" },

@@ -19,12 +19,87 @@ internal class GhostParser
 
         var forMethod = ForFinder.GetForMethodSyntax(callingMethodSyntax);
 
+        var (interfaceType, typeSymbol) = GetInterfaceTypeInfo(forMethod, semanticModel);
+
+        var methodReturnValues = FindMethodReturnValues(callingMethodSyntax, semanticModel);
+
         return new MockInformation(
             ComputeClassNameToGenerate(symbol),
-            ComputeInterfaceToImplement(forMethod, semanticModel),
+            interfaceType.ToString(),
             ComputeUsings(forMethod, semanticModel),
-            ComputeMethods(forMethod, semanticModel)
-            );
+            ComputeMethods(typeSymbol, semanticModel, methodReturnValues)
+        );
+    }
+
+    private static Dictionary<string, object?> FindMethodReturnValues(MethodDeclarationSyntax methodSyntax, SemanticModel semanticModel)
+    {
+        var methodReturnValues = new Dictionary<string, object?>();
+
+        var invocations = methodSyntax.DescendantNodes().OfType<InvocationExpressionSyntax>();
+        foreach (var invocation in invocations)
+        {
+            if (invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
+                memberAccess.Name.Identifier.Text == "Returns")
+            {
+                var methodName = ExtractMethodName(memberAccess.Expression);
+                if (methodName != null)
+                {
+                    var returnValue = ExtractDesiredReturnValue(invocation.ArgumentList.Arguments.FirstOrDefault()?.Expression, semanticModel);
+                    methodReturnValues[methodName] = returnValue;
+                }
+            }
+        }
+
+        return methodReturnValues;
+    }
+
+    private static string? ExtractMethodName(ExpressionSyntax expression)
+    {
+        return expression switch
+        {
+            InvocationExpressionSyntax invocation => invocation.Expression switch
+            {
+                IdentifierNameSyntax identifier => identifier.Identifier.Text,
+                MemberAccessExpressionSyntax memberAccess => memberAccess.Name.Identifier.Text,
+                _ => null
+            },
+            _ => null
+        };
+    }
+
+    private static IReadOnlyCollection<IMethod> ComputeMethods(INamedTypeSymbol typeSymbol, SemanticModel semanticModel, Dictionary<string, object?> methodReturnValues)
+    {
+        var allMethods = typeSymbol.GetMembers().OfType<IMethodSymbol>();
+
+        return allMethods
+            .Select(x =>
+            {
+                var returnType = x.ReturnType;
+                var desiredReturnValue = methodReturnValues.TryGetValue(x.Name, out var value) ? value : null;
+                return CreateTypedMethodNew(x.Name, returnType, desiredReturnValue, semanticModel);
+            })
+            .ToArray();
+    }
+
+    private static IMethod CreateTypedMethodNew(string name, ITypeSymbol returnType, object? desiredReturnValue, SemanticModel semanticModel)
+    {
+        var methodType = typeof(Method<>).MakeGenericType(GetSystemTypeFromSymbol(returnType, semanticModel.Compilation));
+        return (IMethod)Activator.CreateInstance(methodType, new object?[] { name, desiredReturnValue })!;
+    }
+
+    private static object? ExtractDesiredReturnValue(ExpressionSyntax? expression, SemanticModel semanticModel)
+    {
+        if (expression == null) return null;
+
+        var constantValue = semanticModel.GetConstantValue(expression);
+        if (constantValue.HasValue)
+        {
+            return constantValue.Value;
+        }
+
+        // Si ce n'est pas une constante, on pourrait avoir besoin d'une logique plus complexe ici
+        // pour gérer d'autres types d'expressions
+        return null;
     }
 
     private static (TypeSyntax interfaceType, INamedTypeSymbol typeSymbol) GetInterfaceTypeInfo(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
@@ -45,21 +120,6 @@ internal class GhostParser
 
     }
 
-    private static IReadOnlyCollection<Method> ComputeMethods(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
-    {
-        var (_, typeSymbol) = GetInterfaceTypeInfo(forMethod, semanticModel);
-
-        var allMethods = typeSymbol.GetMembers().OfType<IMethodSymbol>();
-
-        return allMethods
-            .Select(x =>
-            {
-                var returnType = GetSystemTypeFromSymbol(x.ReturnType, semanticModel.Compilation);
-                return new Method(x.Name, returnType);
-            })
-            .ToArray();
-    }
-
     private static Type GetSystemTypeFromSymbol(ITypeSymbol typeSymbol, Compilation compilation)
     {
         if (typeSymbol.SpecialType != SpecialType.None)
@@ -69,7 +129,7 @@ internal class GhostParser
                 SpecialType.System_Int32 => typeof(int),
                 SpecialType.System_String => typeof(string),
                 SpecialType.System_Boolean => typeof(bool),
-                SpecialType.System_Void => typeof(void),
+                SpecialType.System_Void => typeof(SpecialTypes.Void),
                 SpecialType.System_Object => typeof(object),
                 SpecialType.System_Char => typeof(char),
                 SpecialType.System_SByte => typeof(sbyte),
@@ -99,7 +159,7 @@ internal class GhostParser
                 //SpecialType.System_Collections_Generic_IReadOnlyCollection_T => expr,
                 //SpecialType.System_Nullable_T => expr,
                 //SpecialType.System_Runtime_CompilerServices_IsVolatile => expr,
-                _ => throw new ArgumentOutOfRangeException(nameof(typeSymbol.SpecialType), typeSymbol.SpecialType.ToString(),  "Unsupported type")
+                _ => throw new ArgumentOutOfRangeException(nameof(typeSymbol.SpecialType), typeSymbol.SpecialType.ToString(), "Unsupported type")
             };
         }
 
@@ -137,12 +197,6 @@ internal class GhostParser
     private static string ComputeClassNameToGenerate(IMethodSymbol symbol)
     {
         return $"{symbol.ContainingType.ToDisplayString().Replace(".", "_")}_{symbol.Name}";
-    }
-
-    private static string ComputeInterfaceToImplement(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
-    {
-        var (interfaceType, _) = GetInterfaceTypeInfo(forMethod, semanticModel);
-        return interfaceType.ToString();
     }
 
     private static IReadOnlyCollection<string> ComputeUsings(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
