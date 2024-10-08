@@ -1,6 +1,4 @@
 ﻿namespace Pinky.Generator.SpecialTypes
 {
-    internal class Void
-    {
-    }
+    internal record Void() : Type("void", "System");
 }

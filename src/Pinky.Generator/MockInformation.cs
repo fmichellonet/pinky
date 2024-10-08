@@ -6,4 +6,4 @@ internal record MockInformation(
     string ClassNameToGenerate,
     string InterfaceToImplement,
     IReadOnlyCollection<string> Usings,
-    IReadOnlyCollection<IMethod> Methods);
+    IReadOnlyCollection<Method> Methods);

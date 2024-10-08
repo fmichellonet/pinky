@@ -1,4 +1,5 @@
 ﻿using System.Collections.Generic;
+using System.Diagnostics;
 using System.Linq;
 using System.Reflection;
 using System.Text;
@@ -143,56 +144,40 @@ public class MockGenerator : IIncrementalGenerator
         return classNamesToGenerate.Aggregate(string.Empty, (current, item) => $"{current}nameof({item}) => (inter as {item}).Received(count),{NewLine}");
     }
 
-    private static string GenerateMethods(IReadOnlyCollection<IMethod> methods)
+    private static string GenerateMethods(IReadOnlyCollection<Method> methods)
     {
         return methods.Aggregate(string.Empty, (current, item) => $"{current}{GenerateMethod(item)}{NewLine}");
     }
 
-    private static string GenerateMethod(IMethod method)
+    private static string GenerateMethod(Method method)
     {
         return $$"""
-                 public virtual {{method.ReturnType.ToFriendlyString()}} {{method.Name}}(){
+                 public virtual {{method.ReturnValue.Type.Name}} {{method.Name}}(){
                     _gateKeeper.Track("{{method.Name}}", Array.Empty<object>());
                     {{GenerateMethodReturnType(method)}}
                  }
                  """;
     }
 
-    private static string GenerateMethodReturnType(IMethod method)
+    private static string GenerateMethodReturnType(Method method)
     {
-        if (method.ReturnType == typeof(SpecialTypes.Void))
+        if (method.ReturnValue.Type == new SpecialTypes.Void())
         {
             return string.Empty;
         }
 
-        return method.DesiredReturnValue != null
-            ? ((string)typeof(MockGenerator)
-                .GetMethod(nameof(FormatDesiredValue), BindingFlags.NonPublic | BindingFlags.Static)
-                .MakeGenericMethod(method.ReturnType)
-                .Invoke(null, [method.DesiredReturnValue]))
-            : "return default;";
+        return $"return {method.ReturnValue.Value ?? "null"};";
     }
 
-    private static string FormatDesiredValue<TReturn>(TReturn desired)
-    {
-        var formattedValue = desired switch
-        {
-            string s => SymbolDisplay.FormatLiteral(s, true),
-            char c => SymbolDisplay.FormatLiteral(c, true),
-            _ => desired!.ToString()
-        };
-        return $"return ((Func<{typeof(TReturn).ToFriendlyString()}>)(() => {formattedValue}))();";
-    }
-
-    private static string GenerateVerifierMethods(IReadOnlyCollection<IMethod> methods)
+    private static string GenerateVerifierMethods(IReadOnlyCollection<Method> methods)
     {
         return methods.Aggregate(string.Empty, (current, item) => $"{current}{GenerateVerifierMethod(item)}{NewLine}");
     }
 
-    private static string GenerateVerifierMethod(IMethod method)
+    private static string GenerateVerifierMethod(Method method)
     {
         return $$"""
-                 public override {{method.ReturnType.ToFriendlyString()}} {{method.Name}}(){
+                 public override {{method.ReturnValue.Type.Name}} {{method.Name}}(){
                     _gateKeeper.Check("{{method.Name}}", Array.Empty<object>(), _count);
                     {{GenerateMethodReturnType(method)}}
                  }

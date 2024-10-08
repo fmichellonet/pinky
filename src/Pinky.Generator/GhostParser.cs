@@ -1,9 +1,10 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Linq;
-using System.Reflection;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
+using Void = Pinky.Generator.SpecialTypes.Void;
 
 namespace Pinky.Generator;
 
@@ -31,15 +32,14 @@ internal class GhostParser
         );
     }
 
-    private static Dictionary<string, object?> FindMethodReturnValues(MethodDeclarationSyntax methodSyntax, SemanticModel semanticModel)
+    private static Dictionary<string, string> FindMethodReturnValues(MethodDeclarationSyntax methodSyntax, SemanticModel semanticModel)
     {
-        var methodReturnValues = new Dictionary<string, object?>();
+        var methodReturnValues = new Dictionary<string, string>();
 
         var invocations = methodSyntax.DescendantNodes().OfType<InvocationExpressionSyntax>();
         foreach (var invocation in invocations)
         {
-            if (invocation.Expression is MemberAccessExpressionSyntax memberAccess &&
-                memberAccess.Name.Identifier.Text == "Returns")
+            if (invocation.Expression is MemberAccessExpressionSyntax { Name.Identifier.Text: "Returns" } memberAccess)
             {
                 var methodName = ExtractMethodName(memberAccess.Expression);
                 if (methodName != null)
@@ -67,39 +67,50 @@ internal class GhostParser
         };
     }
 
-    private static IReadOnlyCollection<IMethod> ComputeMethods(INamedTypeSymbol typeSymbol, SemanticModel semanticModel, Dictionary<string, object?> methodReturnValues)
+    private static IReadOnlyCollection<Method> ComputeMethods(INamedTypeSymbol typeSymbol, SemanticModel semanticModel, Dictionary<string, string> methodReturnValues)
     {
         var allMethods = typeSymbol.GetMembers().OfType<IMethodSymbol>();
 
         return allMethods
             .Select(x =>
             {
-                var returnType = x.ReturnType;
-                var desiredReturnValue = methodReturnValues.TryGetValue(x.Name, out var value) ? value : null;
-                return CreateTypedMethodNew(x.Name, returnType, desiredReturnValue, semanticModel);
+                var desiredReturnValue = methodReturnValues.TryGetValue(x.Name, out var value) ? value : $"default({x.ReturnType.ToDisplayString()})";
+                return new Method(x.Name,
+                    new ReturnValue(
+                        BuildType(x.ReturnType.ToDisplayString(), x.ReturnType.ContainingNamespace.Name),
+                        desiredReturnValue)
+                );
             })
             .ToArray();
     }
 
-    private static IMethod CreateTypedMethodNew(string name, ITypeSymbol returnType, object? desiredReturnValue, SemanticModel semanticModel)
+    private static string ExtractDesiredReturnValue(ExpressionSyntax? expression, SemanticModel semanticModel)
     {
-        var methodType = typeof(Method<>).MakeGenericType(GetSystemTypeFromSymbol(returnType, semanticModel.Compilation));
-        return (IMethod)Activator.CreateInstance(methodType, new object?[] { name, desiredReturnValue })!;
-    }
-
-    private static object? ExtractDesiredReturnValue(ExpressionSyntax? expression, SemanticModel semanticModel)
-    {
-        if (expression == null) return null;
+        if (expression == null)
+        {
+            return "null";
+        }
 
         var constantValue = semanticModel.GetConstantValue(expression);
         if (constantValue.HasValue)
         {
-            return constantValue.Value;
+            return FormatDesiredValue(constantValue.Value!);
         }
 
         // Si ce n'est pas une constante, on pourrait avoir besoin d'une logique plus complexe ici
         // pour gérer d'autres types d'expressions
-        return null;
+        return "null";
+    }
+
+    private static string FormatDesiredValue(object desired)
+    {
+        var formattedValue = desired switch
+        {
+            string s => SymbolDisplay.FormatLiteral(s, true),
+            char c => SymbolDisplay.FormatLiteral(c, true),
+            _ => desired!.ToString()
+        };
+        return formattedValue;
     }
 
     private static (TypeSyntax interfaceType, INamedTypeSymbol typeSymbol) GetInterfaceTypeInfo(InvocationExpressionSyntax forMethod, SemanticModel semanticModel)
@@ -120,78 +131,13 @@ internal class GhostParser
 
     }
 
-    private static Type GetSystemTypeFromSymbol(ITypeSymbol typeSymbol, Compilation compilation)
+    private static Type BuildType(string name, string nameSpace)
     {
-        if (typeSymbol.SpecialType != SpecialType.None)
+        return name switch
         {
-            return typeSymbol.SpecialType switch
-            {
-                SpecialType.System_Int32 => typeof(int),
-                SpecialType.System_String => typeof(string),
-                SpecialType.System_Boolean => typeof(bool),
-                SpecialType.System_Void => typeof(SpecialTypes.Void),
-                SpecialType.System_Object => typeof(object),
-                SpecialType.System_Char => typeof(char),
-                SpecialType.System_SByte => typeof(sbyte),
-                SpecialType.System_Byte => typeof(byte),
-                SpecialType.System_Int16 => typeof(short),
-                SpecialType.System_UInt16 => typeof(ushort),
-                SpecialType.System_UInt32 => typeof(uint),
-                SpecialType.System_Int64 => typeof(long),
-                SpecialType.System_UInt64 => typeof(ulong),
-                SpecialType.System_Decimal => typeof(decimal),
-                SpecialType.System_Single => typeof(float),
-                SpecialType.System_Double => typeof(double),
-                SpecialType.System_IntPtr => typeof(IntPtr),
-                SpecialType.System_UIntPtr => typeof(UIntPtr),
-                SpecialType.System_DateTime => typeof(DateTime),
-                SpecialType.System_IDisposable => typeof(IDisposable),
-                //SpecialType.System_Enum => expr,
-                //SpecialType.System_ValueType => expr,
-                //SpecialType.System_Array => expr,
-                //SpecialType.System_Collections_IEnumerable => expr,
-                //SpecialType.System_Collections_Generic_IEnumerable_T => expr,
-                //SpecialType.System_Collections_Generic_IList_T => expr,
-                //SpecialType.System_Collections_Generic_ICollection_T => expr,
-                //SpecialType.System_Collections_IEnumerator => expr,
-                //SpecialType.System_Collections_Generic_IEnumerator_T => expr,
-                //SpecialType.System_Collections_Generic_IReadOnlyList_T => expr,
-                //SpecialType.System_Collections_Generic_IReadOnlyCollection_T => expr,
-                //SpecialType.System_Nullable_T => expr,
-                //SpecialType.System_Runtime_CompilerServices_IsVolatile => expr,
-                _ => throw new ArgumentOutOfRangeException(nameof(typeSymbol.SpecialType), typeSymbol.SpecialType.ToString(), "Unsupported type")
-            };
-        }
-
-        var metadataName = GetFullyQualifiedMetadataName(typeSymbol);
-        var type = Type.GetType(metadataName);
-
-        if (type != null)
-        {
-            return type;
-        }
-
-        // Fallback : try to infer type based from referenced assemblies
-        foreach (var reference in compilation.References)
-        {
-            if (reference is not PortableExecutableReference peReference)
-            {
-                continue;
-            }
-            var assembly = Assembly.LoadFrom(peReference.FilePath);
-            type = assembly.GetType(metadataName);
-            if (type != null)
-            {
-                return type;
-            }
-        }
-
-        return typeof(object);
-    }
-
-    private static string GetFullyQualifiedMetadataName(ITypeSymbol symbol)
-    {
-        return symbol.ToDisplayString(SymbolDisplayFormat.FullyQualifiedFormat.WithGlobalNamespaceStyle(SymbolDisplayGlobalNamespaceStyle.Included));
+            "void" => new Void(),
+            _ => new Type(name, nameSpace)
+        };
     }
 
     private static string ComputeClassNameToGenerate(IMethodSymbol symbol)

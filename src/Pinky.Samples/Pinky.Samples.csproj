@@ -22,6 +22,11 @@
     
   </ItemGroup>
 
+  <ItemGroup>
+    <!-- Removing the generated files from compilation, adding them back as non-content files -->
+    <Compile Remove="$(CompilerGeneratedFilesOutputPath)/**/*.cs" />
+    <None Include="$(CompilerGeneratedFilesOutputPath)/**/*.cs" />
+  </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Pinky.Generator\Pinky.Generator.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />

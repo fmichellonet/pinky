@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 
 public static class GhostHelpers
 {
-    public static (string MethodName, Type DeclaringType) GetCallingMethodInfo([CallerMemberName] string callerName = "")
+    public static (string MethodName, System.Type DeclaringType) GetCallingMethodInfo([CallerMemberName] string callerName = "")
     {
         var stackTrace = new StackTrace();
         for (var i = 1; i < stackTrace.FrameCount; i++)
@@ -23,7 +23,7 @@ public static class GhostHelpers
         throw new ArgumentException("Unable to find the calling method");
     }
 
-    public static string GetTypeNameToInstantiate(string methodName, Type declaringType)
+    public static string GetTypeNameToInstantiate(string methodName, System.Type declaringType)
     {
         return $"{declaringType.FullName.Replace(".", "_")}_{methodName}";
     }

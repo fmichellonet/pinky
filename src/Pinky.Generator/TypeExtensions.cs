@@ -5,7 +5,7 @@ namespace Pinky.Generator;
 
 public static class TypeExtensions
 {
-    private static readonly Dictionary<Type, string> SpecialTypeNames = new()
+    private static readonly Dictionary<System.Type, string> SpecialTypeNames = new()
     {
         { typeof(SpecialTypes.Void), "void" },
         //{ typeof(int), "int" },
@@ -19,7 +19,7 @@ public static class TypeExtensions
         //{ typeof(object), "object" }
     };
 
-    public static string ToFriendlyString(this Type type)
+    public static string ToFriendlyString(this System.Type type)
     {
         var value = SpecialTypeNames.TryGetValue(type, out var specialName);
         return value ? specialName : type.Name;
